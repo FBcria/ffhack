@@ -1,0 +1,28 @@
+name: build
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Theos
+        run: |
+          brew install ldid xz
+          git clone --recursive https://github.com/theos/theos.git $HOME/theos
+          sudo mkdir -p /opt/theos && sudo mv $HOME/theos/* /opt/theos
+          sudo mkdir -p /opt/theos/sdks
+          sudo ln -sf "$(xcrun --sdk iphoneos --show-sdk-path)" /opt/theos/sdks/iPhoneOS.sdk
+
+      - name: Build
+        run: |
+          export THEOS=/opt/theos
+          export PATH=$THEOS/bin:$PATH
+          sed -i '' 's/iphone:clang:16.5:14.0/iphone:clang:latest:14.0/' Makefile
+          make FINALPACKAGE=1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioCore
+          path: .theos/obj/**/*.dylib
