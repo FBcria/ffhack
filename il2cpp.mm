@@ -15,7 +15,6 @@ typedef size_t  (*t_field_get_offset)(void*);
 typedef void*   (*t_class_get_method)(void*, const char*, int);
 typedef void*   (*t_method_get_pointer)(void*);
 typedef void*   (*t_thread_attach)(void*);
-typedef void*   (*t_class_get_pointer)(void*);
 typedef void*   (*t_class_get_parent)(void*);
 typedef const char* (*t_class_get_name)(void*);
 
@@ -29,7 +28,6 @@ static t_field_get_offset      p_field_get_offset;
 static t_class_get_method      p_class_get_method;
 static t_method_get_pointer    p_method_get_pointer;
 static t_thread_attach         p_thread_attach;
-static t_class_get_pointer     p_class_get_pointer;
 static t_class_get_parent      p_class_get_parent;
 static t_class_get_name        p_class_get_name;
 
@@ -38,17 +36,20 @@ static void* S(const char* n) { return g_img ? dlsym(g_img, n) : nullptr; }
 bool init() {
     if (p_class_from_name) return true;
 
+    NSLog(@"[AudioCore] init: procurando UnityFramework");
+
     for (uint32_t i = 0; i < _dyld_image_count(); i++) {
         const char* n = _dyld_get_image_name(i);
         if (n && strstr(n, "UnityFramework")) {
             g_img = dlopen(n, RTLD_NOLOAD | RTLD_NOW);
+            NSLog(@"[AudioCore] imagem achada: %s", n);
             break;
         }
     }
     if (!g_img)
         g_img = dlopen("@executable_path/Frameworks/UnityFramework.framework/UnityFramework", RTLD_NOW);
     if (!g_img) g_img = dlopen("UnityFramework", RTLD_NOW);
-    if (!g_img) return false;
+    if (!g_img) { NSLog(@"[AudioCore] UnityFramework nao abriu"); return false; }
 
     p_domain_get        = (t_domain_get)S("il2cpp_domain_get");
     p_get_asms          = (t_domain_get_assemblies)S("il2cpp_domain_get_assemblies");
@@ -59,11 +60,17 @@ bool init() {
     p_class_get_method  = (t_class_get_method)S("il2cpp_class_get_method_from_name");
     p_method_get_pointer= (t_method_get_pointer)S("il2cpp_method_get_pointer");
     p_thread_attach     = (t_thread_attach)S("il2cpp_thread_attach");
-    p_class_get_pointer = (t_class_get_pointer)S("il2cpp_class_get_pointer"); // opcional
-    p_class_get_parent  = (t_class_get_parent)S("il2cpp_class_get_parent");   // opcional
+    p_class_get_parent  = (t_class_get_parent)S("il2cpp_class_get_parent");
     p_class_get_name    = (t_class_get_name)S("il2cpp_class_get_name");
 
-    return p_domain_get && p_get_asms && p_class_from_name && p_class_get_field;
+    if (!p_domain_get || !p_class_from_name || !p_class_get_field) {
+        NSLog(@"[AudioCore] API il2cpp incompleta: domain=%p class=%p field=%p",
+              p_domain_get, p_class_from_name, p_class_get_field);
+        g_img = nullptr;
+        return false;
+    }
+    NSLog(@"[AudioCore] il2cpp resolvido");
+    return true;
 }
 
 void attach() {
@@ -107,13 +114,12 @@ void* method_ptr(void* klass, const char* name, int argc) {
 void dump_classes(const char* needle) {
     attach();
     if (!p_get_asms || !p_class_get_name) return;
-    NSMutableString* out = [NSMutableString stringWithFormat:@"=== FFHack dump '%s' ===\n", needle];
+    NSMutableString* out = [NSMutableString stringWithFormat:@"=== dump '%s' ===\n", needle];
     size_t n = 0;
     void** asms = p_get_asms(p_domain_get(), &n);
     for (size_t i = 0; i < n; i++) {
         void* img = p_get_image(asms[i]);
         if (!img) continue;
-        // percorre só as classes conhecidas do assembly pelo nome do namespace vazio
         void* k = p_class_from_name(img, "", needle);
         if (k) [out appendFormat:@"%s -> %p\n", needle, k];
     }
