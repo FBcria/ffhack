@@ -5,24 +5,27 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Instalar Theos
+      - name: Compilar dylib
         run: |
-          brew install ldid xz
-          git clone --recursive https://github.com/theos/theos.git $HOME/theos
-          sudo mkdir -p /opt/theos && sudo mv $HOME/theos/* /opt/theos
-          sudo mkdir -p /opt/theos/sdks
-          sudo ln -sf "$(xcrun --sdk iphoneos --show-sdk-path)" /opt/theos/sdks/iPhoneOS.sdk
-
-      - name: Build
-        run: |
-          export THEOS=/opt/theos
-          export PATH=$THEOS/bin:$PATH
-          sed -i '' 's/iphone:clang:16.5:14.0/iphone:clang:latest:14.0/' Makefile
-          make FINALPACKAGE=1
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "SDK: $SDK"
+          xcrun --sdk iphoneos clang \
+            -arch arm64 \
+            -dynamiclib \
+            -fobjc-arc -std=c++17 -O2 -fvisibility=hidden -fno-exceptions \
+            -miphoneos-version-min=14.0 \
+            -isysroot "$SDK" \
+            -undefined dynamic_lookup \
+            -framework UIKit -framework Foundation \
+            -framework CoreGraphics -framework QuartzCore \
+            -o AudioCore.dylib \
+            main.mm il2cpp.mm ESP.mm Aimbot.mm Menu.mm
+          file AudioCore.dylib
 
       - uses: actions/upload-artifact@v4
         with:
           name: AudioCore
-          path: .theos/obj/**/*.dylib
+          path: AudioCore.dylib
