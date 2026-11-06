@@ -2,12 +2,12 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <mach/mach.h>
+#include <mach/mach_vm.h>
 #include "Types.h"
 
 namespace il2 {
-    // resolve a API il2cpp de dentro do UnityFramework do próprio jogo
     bool  init();
-    void  attach();                    // obrigatório em cada thread nova
+    void  attach();
     void* find_class(const char* name);
     size_t field_off(void* klass, const char* name);
     void* method_ptr(void* klass, const char* name, int argc);
@@ -27,5 +27,5 @@ namespace il2 {
                              (mach_msg_type_number_t)n) == KERN_SUCCESS;
     }
 
-    void dump_classes(const char* needle);   // diagnóstico
+    void dump_classes(const char* needle);
 }
